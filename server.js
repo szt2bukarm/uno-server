@@ -293,31 +293,6 @@ io.on("connection", (socket) => {
       player: player
     })
   })
-
-  socket.on('lastcard', (lobbyId,name,player) => {
-    console.log("lastcard")
-    io.to(lobbyId).emit('lastcardnotification', {
-      name: name,
-      player: player
-    })
-  })
-
-  socket.on('lastcardattack', (lobbyId,attackedPlayer,attacker) => {
-    if (attackedPlayer == attacker) {
-      io.to(lobbyId).emit('lastcardattacknotification', {
-        attack: false,
-      })
-    } else {
-      io.to(lobbyId).emit('lastcardattacknotification', {
-        attack: true,
-      })
-    }
-  })
-
-  socket.on('playerdisconnected', (lobbyId) => {
-    console.log("disconnect");
-    io.to(lobbyId).emit('playerdisconnectednotification')
-  })
 });
 
 server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
