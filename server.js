@@ -64,6 +64,12 @@ const generateLobbyId = () => {
   return lobbyId;
 };
 
+app.get('/status', (req, res) => {
+  res.json({
+    status: 'ok'
+  })
+})
+
 io.on("connection", (socket) => {
   console.log("a user connected ", socket.id);
 
