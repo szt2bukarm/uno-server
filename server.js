@@ -6,6 +6,39 @@ const cors = require("cors");
 const crypto = require("crypto");
 const { join } = require("path");
 
+const names = [
+  "Sophia",
+  "Liam",
+  "Olivia",
+  "Noah",
+  "Ava",
+  "Emma",
+  "Mason",
+  "Isabella",
+  "Elijah",
+  "Charlotte",
+  "Lucas",
+  "Amelia",
+  "Benjamin",
+  "Mia",
+  "Henry",
+  "Harper",
+  "Sebastian",
+  "Ella",
+  "Jack",
+  "Luna",
+  "Alexander",
+  "Grace",
+  "Oliver",
+  "Chloe",
+  "Ethan",
+  "Aurora",
+  "James",
+  "Victoria",
+  "Logan",
+  "Zoe"
+];
+
 const app = express();
 app.use(
   cors({
@@ -45,6 +78,7 @@ io.on("connection", (socket) => {
     lobbies[lobbyId].players.push({
       id: socket.id,
       name: playername,
+      isBot: false
     });
     socket.join(lobbyId);
     callback({
@@ -53,6 +87,7 @@ io.on("connection", (socket) => {
       player: {
         id: socket.id,
         name: playername,
+        isBot: false
       },
       players: lobbies[lobbyId].players,
     });
@@ -109,6 +144,7 @@ io.on("connection", (socket) => {
       lobbies[lobbyId].players.push({
         id: socket.id,
         name: playername,
+        isBot: false
       });
       socket.join(lobbyId);
       socket.to(lobbyId).emit("playerjoined", {
@@ -121,11 +157,63 @@ io.on("connection", (socket) => {
         player: {
           id: socket.id,
           name: playername,
+          isBot: false
         },
         players: lobbies[lobbyId].players,
       });
     }
   });
+
+  socket.on('addbot', (lobbyId) => {
+    lobbies[lobbyId].players.push({
+      id: uuidv4(),
+      name: `${names[Math.floor(Math.random() * names.length)]} (bot)`,
+      isBot: true
+    });
+    io.to(lobbyId).emit('playerjoined', {
+      players: lobbies[lobbyId].players,
+    });
+  })
+
+  socket.on("deletebot", (lobbyId, botId) => {
+    lobbies[lobbyId].players = lobbies[lobbyId].players.filter(player => player.id !== botId);
+    io.to(lobbyId).emit('playerleft', {
+      players: lobbies[lobbyId].players,
+    });
+  })
+
+
+  const checkCards = (cards,lastCard) => {
+    const commonIndex = cards.findIndex((c) => c.type === "common");
+    const cardIndex = cards.findIndex((c) => c.card === lastCard.card);
+    const typeIndex = cards.findIndex((c) => c.type === lastCard.type);
+
+    if (typeIndex != -1) {
+      if (lastCard?.type == cards[typeIndex].type) return typeIndex;
+    }
+    if (cardIndex != -1) {
+      if (lastCard?.card == cards[cardIndex].card) return cardIndex;
+    }
+    if (commonIndex != -1) {
+      return commonIndex;
+    }
+    return -1;
+  }
+
+  socket.on('checkcardsbot', (lobbyId, cards, lastCard, playerNo) => {
+    const cardIndex = checkCards(cards, lastCard);
+    console.log(cardIndex);
+    io.to(lobbyId).emit('checkcardsbotnotification', {
+      cardIndex: cardIndex,
+      playerNo: playerNo
+    })
+  })
+
+  socket.on('reverse', (lobbyId, reversed) => {
+    socket.to(lobbyId).emit('reversenotification', {
+      reversed: !reversed
+    })
+  })
 
   socket.on(
     "startgamehost",
@@ -141,7 +229,8 @@ io.on("connection", (socket) => {
             return {
               id: player.id,
               name: player.name,
-              idx: i
+              idx: i,
+              isBot: player.isBot
             }
           }),
           firstCard: {
@@ -155,6 +244,12 @@ io.on("connection", (socket) => {
     }
   );
 
+  socket.on('deckchanged', (lobbyId, deck) => {
+    socket.to(lobbyId).emit('deckchangednotification', {
+      deck: deck
+    })
+  })
+
   socket.on('cardplayed', (lobbyId, playedType, playedCard,cardIndex,playersCards, player) => {
     socket.to(lobbyId).emit('cardplayednotification', {
       playedType: playedType,
@@ -166,32 +261,29 @@ io.on("connection", (socket) => {
   })
 
   socket.on('changeplayer', (lobbyId, player) => {
-    socket.to(lobbyId).emit('changeplayernotification', {
+    io.to(lobbyId).emit('changeplayernotification', {
       player: player
     })
   })
 
-  socket.on('cardpulled', (lobbyId, newCards,newDeck, player) => {
+  socket.on('cardpulled', (lobbyId, newCards, player) => {
     socket.to(lobbyId).emit('cardpullednotification', {
       newCards: newCards,
-      newDeck: newDeck,
       player: player
     })
   })
 
-  socket.on('attack', (lobbyId, newCards,newDeck, player, amount) => {
+  socket.on('attack', (lobbyId, newCards, player, amount) => {
     io.to(lobbyId).emit('attacknotification', {
       newCards: newCards,
-      newDeck: newDeck,
       player: player,
       amount: amount
     })
   })
 
-  socket.on('attackpulled', (lobbyId, newCards,newDeck, player) => {
+  socket.on('attackpulled', (lobbyId, newCards, player) => {
     io.to(lobbyId).emit('attackpullednotification', {
       newCards: newCards,
-      newDeck: newDeck,
       player: player
     })
   })
@@ -200,6 +292,31 @@ io.on("connection", (socket) => {
     io.to(lobbyId).emit('blocknotification', {
       player: player
     })
+  })
+
+  socket.on('lastcard', (lobbyId,name,player) => {
+    console.log("lastcard")
+    io.to(lobbyId).emit('lastcardnotification', {
+      name: name,
+      player: player
+    })
+  })
+
+  socket.on('lastcardattack', (lobbyId,attackedPlayer,attacker) => {
+    if (attackedPlayer == attacker) {
+      io.to(lobbyId).emit('lastcardattacknotification', {
+        attack: false,
+      })
+    } else {
+      io.to(lobbyId).emit('lastcardattacknotification', {
+        attack: true,
+      })
+    }
+  })
+
+  socket.on('playerdisconnected', (lobbyId) => {
+    console.log("disconnect");
+    io.to(lobbyId).emit('playerdisconnectednotification')
   })
 });
 
